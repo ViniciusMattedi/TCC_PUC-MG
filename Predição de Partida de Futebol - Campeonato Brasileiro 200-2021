@@ -1,0 +1,247 @@
+import pandas as pd
+import numpy as np
+from IPython.display import display
+import matplotlib.pyplot as plt
+import seaborn as sns
+import time
+from sklearn.feature_selection import SelectKBest
+from sklearn.preprocessing import StandardScaler, MinMaxScaler
+from sklearn.linear_model import LogisticRegression
+from sklearn.metrics import confusion_matrix
+from sklearn.naive_bayes import GaussianNB
+from sklearn.metrics import accuracy_score , f1_score, precision_score, recall_score
+from sklearn.model_selection import train_test_split
+from sklearn.model_selection import cross_val_score
+from sklearn.svm import SVC
+
+dCampBrasil = pd.read_csv('D:/Pós Graduação - PUC MG/TCC/campeonato-brasileiro.csv', header = 0, sep = ';')
+dCampBrasil.head()
+
+dEstatistic = pd.read_csv('D:/Pós Graduação - PUC MG/TCC/campeonato-brasileiro-estatisticas.csv', header = 0, sep = ';')
+dEstatistic.head()
+
+Dados = pd.merge(dCampBrasil, dEstatistic, on = 'ID', how = 'inner')
+Dados.set_index(['ID'])
+Dados.head()
+Dados.shape
+
+LEGENDA:
+ID - ID da partida
+Rodada : Rodada que aconteceu a partida
+Data : Data que ocorreu a partida
+Horário :  Horário que ocorreu a partida
+Dia : Dia da semana que ocorreu a partida
+Mandante : Clube mandante                      
+Visitante : Clube Visitante                      
+Vencedor : Clube vencedor da partida. Quando tiver "-", é um empate
+Arena : Arena que ocorreu a partida                      
+Mandante Placar : Gols que o clube mandante fez na partida                      
+Visitante Placar : Gols que o clube visitante fez na partida                      
+Estado Mandante : Estado do clube mandatorio                      
+Estado Visitante : Estado do clube visitante                      
+Estado Vencedor : Estado do clube vencedor. Quando tiver "-", é um empate
+M_: prefixo para mandante, V_: prefixo para visitante
+Chutes - Finalizações
+ChutesGol - Finalizações na direção do gol
+Posse de bola - Percentual da posse de bola
+Faltas - Quantidade de faltas cometidas na partida
+Cartões Amarelo - Quantidade de cartões amarelos para o clube na partida
+Cartões Vermelhos - Quantidade de cartões vermelhos para o clube na partida
+Impedimentos - Quantidade de impedimentos para o clube na partida
+Escanteios - Quantidade de escanteios para o clube na partida
+
+Partidas= len(Dados)
+print('Quantidade de Partidas: ' + str(Partidas) + ' (nº de linhas do dataset)')
+print(' ')
+Clubes = Dados['Mandante'].tolist()
+print('Lista de Clubes: {}'.format(sorted(set(Clubes))))
+print(' ')
+Clubes = sorted(set([x.upper() for x in Clubes]))
+print ('Lista de Clubes Corrigida: {}'.format(Clubes))
+print ('Quantidade de Clubes: ' + str(len(Clubes)))
+print(' ')
+Estados = Dados['Estado_Mandante'].tolist() + Dados['Estado_Visitante'].tolist()
+print('Lista de Estados: {}'.format(sorted(set(Estados))))
+print(' ')
+Mengao = (len(Dados[Dados.Vencedor == 'Flamengo'])) + (len(Dados[Dados.Vencedor == 'flamengo']))
+PercMengao = round(((Mengao/((len(Dados[Dados.Mandante == 'Flamengo']))+(len(Dados[Dados.Visitante == 'Flamengo']))))*100),0)
+print('Nº de vezes que o Flamengo ganhou: ' + str(Mengao) + ', (' + str(PercMengao) +' % dos confrontos)')
+print(' ')
+VMandante = len(Dados[Dados.Vencedor == Dados.Mandante])
+print('Nº de Vitória dos Mandantes: ' + str(VMandante))
+Empate = len(Dados[Dados.Vencedor == '-'])
+print('Jogos empatados :' + str(Empate))
+Vvisitante = len(Dados[Dados.Vencedor == Dados.Visitante])
+print('Nº de Vitória dos Visitantes: ' + str(Vvisitante))
+Perc_VMandante = round((VMandante/Partidas)*100,0)
+print('Percentual de Vitória dos Mandantes: ' + str(Perc_VMandante) + ' %')
+Media_Gol_Mandante = round(Dados.Mandante_Placar.mean(),2)
+print('Média de gols dos times mandantes: ' + str(Media_Gol_Mandante))
+Media_Gol_Visitante = round(Dados.Visitante_Placar.mean(),2)
+print('Média de gols dos times visitantes: ' + str(Media_Gol_Visitante))
+
+x = np.arange(3)
+plt.bar(x, [VMandante, Vvisitante, Empate],color= 'blue')
+plt.xticks(x, ('Mandante', 'Visitante', 'Empate'))
+plt.show()
+
+Dados['Mandante'] = Dados['Mandante'].str.upper()
+Dados['Visitante'] = Dados['Visitante'].str.upper()
+Dados['Vencedor'] = Dados['Vencedor'].str.upper()
+def mudar_nome_vencedor(row):
+    if (row['Vencedor'] == row['Visitante']):
+        return 0
+    elif (row['Vencedor'] == row['Mandante']):
+        return 1
+    else:
+        return 2
+Dados['Vencedor'] = Dados.apply(mudar_nome_vencedor, axis=1)
+
+print(Dados[['Mandante_Placar', 'Visitante_Placar', 'M_Chutes', 'M_ChutesGol', 'V_Chutes', 'V_ChutesGol', 'M_Posse de bola', 'V_Posse de bola']])
+
+Dados['M_Posse de bola'] = Dados['M_Posse de bola'].str.replace('%','')
+Dados['M_Posse de bola'] = pd.to_numeric(Dados['M_Posse de bola'],errors = 'coerce')
+Dados['M_Posse de bola'] = Dados['M_Posse de bola'] / 100
+Dados['V_Posse de bola'] = Dados['V_Posse de bola'].str.replace('%','')
+Dados['V_Posse de bola'] = pd.to_numeric(Dados['V_Posse de bola'],errors = 'coerce')
+Dados['V_Posse de bola'] = Dados['V_Posse de bola'] / 100
+
+print(len(Dados.loc[(Dados.M_ChutesGol== 0) & (Dados.M_Chutes>2) & (Dados.Mandante_Placar!=0)]))
+print(len(Dados.loc[(Dados.V_ChutesGol== 0) & (Dados.V_Chutes>2) & (Dados.Visitante_Placar!=0)]))
+M_chutes_gol_estim = round((Dados['M_Chutes'] / 3),0)
+Dados.loc[Dados['M_ChutesGol']== 0, 'M_ChutesGol'] = M_chutes_gol_estim  
+V_chutes_gol_estim = round((Dados['V_Chutes'] / 3),0)
+Dados.loc[Dados['V_ChutesGol']== 0, 'V_ChutesGol'] = V_chutes_gol_estim  
+
+Dados.isnull().sum()
+Dados = Dados.dropna(axis=0)
+Dados.shape
+
+Atributos = Dados.drop(['Data', 'Horário', 'Dia','Arena', 'Rodada','Vencedor','Estado_Mandante','Estado_Visitante', 'Estado_Vencedor', 'Mandante', 'Visitante', 'ID'], axis =1)
+Result = Dados['Vencedor'].copy()
+Atributos.describe
+Atributos.dtypes
+Result.head()
+
+Lista_Colunas = ('Mandante_Placar', 'Visitante_Placar', 'M_Chutes', 'M_ChutesGol', 'M_Posse de bola', 'M_Faltas', 'M_Cartoes amarelos', 'M_Cartoes vermelhos', 'M_Impedimentos', 'M_Escanteios', 'V_Chutes', 'V_ChutesGol', 'V_Posse de bola', 'V_Faltas', 'V_Cartoes amarelos', 'V_Cartoes vermelhos', 'V_Impedimentos', 'V_Escanteios')
+K_Best_Atributos = SelectKBest(k='all')
+K_Best_Atributos.fit_transform(Atributos, Result)
+K_Best_Atributos_scores = np.around((K_Best_Atributos.scores_),2)
+raw_pairs = zip(Lista_Colunas[0:], K_Best_Atributos_scores)
+ordered_pairs = list(reversed(sorted(raw_pairs, key=lambda x: x[1])))
+
+K_Best_Atributos_final = dict(ordered_pairs[:18])
+best_features = K_Best_Atributos_final.keys()
+print ('')
+print ('Melhores features: ' +str(K_Best_Atributos_final))
+
+plt.figure(figsize =(20, 6))
+Atributos.boxplot(column=['Mandante_Placar', 'M_ChutesGol', 'M_Posse de bola', 'M_Faltas', 'M_Cartoes amarelos', 'M_Cartoes vermelhos', 'M_Escanteios'])
+plt.show
+
+plt.figure(figsize =(20, 6))
+Atributos.boxplot(column=['Visitante_Placar', 'V_ChutesGol', 'V_Posse de bola', 'V_Faltas', 'V_Cartoes amarelos', 'V_Cartoes vermelhos', 'V_Escanteios'])
+plt.show
+
+M_Gols_Clubes = Dados.groupby('Mandante')['Mandante_Placar'].sum()
+V_Gols_Clubes = Dados.groupby('Visitante')['Visitante_Placar'].sum()
+print('Média de Gols dos Mandantes: ' + str((M_Gols_Clubes).mean()))
+print('Média de Gols dos Visitantes: ' + str((V_Gols_Clubes).mean()))
+Best_M_Gols_Clubes = M_Gols_Clubes.loc[M_Gols_Clubes>2*(M_Gols_Clubes).mean()]
+print(Best_M_Gols_Clubes)
+Best_V_Gols_Clubes = V_Gols_Clubes.loc[V_Gols_Clubes>2*(V_Gols_Clubes).mean()]
+print(Best_V_Gols_Clubes)
+Best_Gols_Clubes = Best_M_Gols_Clubes + Best_V_Gols_Clubes
+print(Best_Gols_Clubes)
+Best_Clubes = ['Média','ATLETICO-MG', 'FLAMENGO', 'PALMEIRAS']
+Num_Gols = ['80','351','373', '378']
+plt.style.use('ggplot')
+plt.figure(figsize = (20, 7))
+plt.bar(Best_Clubes, Num_Gols, ec = "k", alpha = .8)
+plt.title("Mais Gols Marcados")
+plt.xlabel("Clubes Goleadores")
+plt.ylabel("Gols Marcados")
+plt.show()
+
+MelhoresAtributos = Atributos.drop(['M_Chutes', 'V_Chutes', 'V_Impedimentos', 'M_Impedimentos'], axis =1)
+
+sns.set(style='ticks', color_codes=True)
+sns.pairplot(MelhoresAtributos, kind='reg')
+plt.show()
+
+scaler = MinMaxScaler().fit(MelhoresAtributos)
+MelhoresAtributos = scaler.transform(MelhoresAtributos)
+print ('MelhoresAtributos: ',MelhoresAtributos.shape)
+print(MelhoresAtributos)
+
+xTrain, xTest, yTrain, yTest = train_test_split(MelhoresAtributos[:2170], Result[:2170], random_state=42, test_size=0.2)
+print (len(xTrain), len(yTrain))
+print (len(xTest), len(yTest))
+
+print('Classificador A: Logist Regression ')
+start = time.time()
+classif_A = LogisticRegression(multi_class='multinomial',max_iter=2000)
+classif_A.fit(xTrain, yTrain)
+predicA = classif_A.predict(xTest)
+
+lg_acc = accuracy_score(yTest, predicA)
+f1=f1_score(yTest,predicA,average = 'micro')
+Scores = cross_val_score(classif_A, MelhoresAtributos, Result, cv=5, scoring='accuracy')
+end = time.time()
+print ('Acurácia:{}'.format(lg_acc))
+print ('Scores Cross-Validation:{}'.format(Scores.mean()))
+print ('F1 Score:{}'.format(f1) )
+print ('Modelo treinado em {:.4f} segundo'.format(end - start))
+
+
+print('Classificador B: Support Vector Machine ')
+start = time.time()
+classif_B = SVC()
+classif_B.fit(xTrain, yTrain)
+predicB= classif_B.predict(xTest)
+
+svc_acc = accuracy_score(yTest, predicB)
+f1=f1_score(yTest,predicB, average='micro')
+Scores = cross_val_score(classif_B, MelhoresAtributos, Result, cv=5, scoring='accuracy')
+end = time.time()
+print ('Acurácia:{}'.format(svc_acc))
+print ('Scores Cross-Validation:{}'.format(Scores.mean()))
+print ('F1 Score:{}'.format(f1) )
+print ('Modelo treinado em {:.4f} segundo'.format(end - start))
+
+
+print('Classificador C: Naive Baeys ')
+start = time.time()
+classif_C = GaussianNB()
+classif_C.fit(xTrain, yTrain)
+predicC= classif_C.predict(xTest)
+
+nb_acc = accuracy_score(yTest, predicC)
+f1=f1_score(yTest,predicC, average='micro')
+Scores = cross_val_score(classif_C, MelhoresAtributos, Result, cv=5, scoring='accuracy')
+end = time.time()
+print ('Acurácia:{}'.format(svc_acc))
+print ('Scores Cross-Validation:{}'.format(Scores.mean()))
+print ('F1 Score:{}'.format(f1) )
+print ('Modelo treinado em {:.4f} segundo'.format(end - start))
+
+
+Validation = MelhoresAtributos[2170:]
+ID_Partida = Dados['ID']
+ID_Partida = ID_Partida[2170:]
+Resultado = Dados['Vencedor']
+Resultado = Resultado[2170:]
+
+pred = classif_A.predict(Validation)
+df_Valid=pd.DataFrame({'ID':ID_Partida, 'Resultado': Resultado, 'Previsão':pred})
+df_Valid.head()
+df_Valid.shape
+
+
+cm = confusion_matrix(Resultado, pred)
+
+df_cm = pd.DataFrame(cm, index=['Vitória','Derrota', 'Empate'],
+                    columns=['Vitória','Derrota', 'Empate'])
+
+sns.heatmap(df_cm, annot=True, cmap='Greens')
+plt.show()
